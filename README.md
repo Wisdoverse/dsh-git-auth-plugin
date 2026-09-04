@@ -1,90 +1,175 @@
-# dsh-git-auth
+<h1 align="center">dsh-git-auth</h1>
 
-一个 DSH **宿主工具插件**(bundle),给 agent 提供三个工具,用于管理 **glab / gh 授权** 和 **SSH key**。
+<p align="center">
+  <strong>GitHub, GitLab, and SSH authentication tools for DeepSeek Harness</strong>
+</p>
 
-## 提供的工具
+<p align="center">
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/Wisdoverse/dsh-git-auth-plugin?style=flat-square"></a>
+  <a href="package.json"><img alt="Top language" src="https://img.shields.io/github/languages/top/Wisdoverse/dsh-git-auth-plugin?style=flat-square"></a>
+  <img alt="Token handling" src="https://img.shields.io/badge/tokens-environment%20only-2ea44f?style=flat-square">
+</p>
 
-| 工具 | 作用 |
-|---|---|
-| `auth_status` | 只读状态:gh / glab 是否已授权(以及以哪个账号)、SSH agent 里有哪些 key、`~/.ssh` 下有哪些公钥。 |
-| `client_auth` | 非交互登录/登出 gh 或 glab。token 只从环境变量读取并走 stdin，不进入工具参数或输出。 |
-| `ssh_key` | 生成 / 列出 / 显示 ed25519 SSH key,生成后可选 `ssh-add` 并打印公钥供粘贴。 |
+<p align="center">
+  <strong>English</strong> · <a href="README.zh-CN.md">简体中文</a>
+</p>
 
-## 工作原理
+Give DSH agents a small, approval-aware toolset for inspecting and managing
+`gh`, `glab`, and SSH credentials on the host.
 
-按 DSH bundle 约定,插件是一个声明了 `"dsh": { "bundle": { "patch": "./cordis.patch.yml" } }` 的 npm 包。
-`cordis.patch.yml` 把工具插件 **insert 进宿主组装**,因此它会注册进 tools 注册表的 **global 层**——任何 agent 经 scope 链(agent → preset → global)都能看到,与运行哪个 preset 无关。
-
-所有命令都通过宿主 `ctx.shell` 执行,继承当前会话的沙箱策略和取消语义。读取状态沿用当前策略;登录、登出、生成 key 和 `ssh-add` 在执行前通过 DSH 原生 approval 请求一次性权限提升。SSH key 路径被限制为 `~/.ssh` 的直接子文件。
-
-## 安装
-
-在目标 profile 下用 `dsh plugin add` 安装本插件目录(记得把路径改成你的实际路径):
-
-```bash
-cd <你的 profile 目录>   # 或直接跳到下一步
-dsh plugin add /data/dsh/home/dsh-git-auth
+```text
+Check authentication                 →  auth_status
+Sign in with GH_TOKEN / GITLAB_TOKEN →  client_auth
+Generate or inspect an SSH key       →  ssh_key
 ```
 
-安装会对齐 profile 的 bundle 列表并重启后生效。若你要在 **Web** 界面使用,重启用到的 profile。
+## Contents
 
-## 使用(给 agent 的自然语言)
+- [Features](#features)
+- [Tools](#tools)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Token handling](#token-handling)
+- [Security](#security)
+- [Development](#development)
+- [License](#license)
 
-- 检查状态:`auth_status`
-- gh 登录(用现存环境变量 token):`client_auth(client: "gh")`
-- gh 登出:`client_auth(client: "gh", logout: true)`
-- 生成 SSH key 并加入 agent:`ssh_key(action: "generate", comment: "you@example.com", add_agent: true)`
-- 看某个公钥:`ssh_key(action: "show", path: "~/.ssh/id_ed25519")`
+## Features
 
-登录/登出和 SSH key 写操作会先弹出用户批准;拒绝批准时不会执行命令。
+| Feature | Description |
+| --- | --- |
+| Unified status | Reports `gh`, `glab`, SSH-agent, and public-key status in one call. |
+| Non-interactive login | Authenticates `gh` or `glab` with a token supplied by the DSH host environment. |
+| SSH key management | Generates, lists, and displays Ed25519 keys directly under `~/.ssh`. |
+| Approval-aware writes | Requests DSH approval before login, logout, key generation, or `ssh-add`. |
+| Settings UI | Exposes hosts, timeout, key path, comment, and `ssh-add` defaults under **Settings → Plugins**. |
 
-## 设置
+> [!IMPORTANT]
+> Access tokens are not accepted as tool arguments. Put them in the DSH host
+> environment so they do not enter the model context or tool-call log.
 
-插件注册了一个用户可编辑的 settings 命名空间 `git-auth`,可配置项:
+## Tools
 
-| 字段 | 默认 | 作用 |
-|---|---|---|
-| `ghHost` | `github.com` | gh 登录默认主机 |
-| `glabHost` | `gitlab.com` | glab 登录默认主机 |
-| `commandTimeoutMs` | `60000` | 单个子命令超时(ms) |
-| `sshPath` | ``(空)→ `~/.ssh/id_ed25519` | 生成/显示 key 的默认路径 |
-| `sshComment` | ``(空) | 生成 key 的默认 comment |
-| `sshAddAgent` | `false` | 默认是否把新 key 加入 ssh-agent |
+| Tool | Purpose | Writes state |
+| --- | --- | --- |
+| `auth_status` | Show GitHub CLI, GitLab CLI, SSH-agent, and public-key status. | No |
+| `client_auth` | Log `gh` or `glab` in or out. | Yes; approval required |
+| `ssh_key` | Generate, list, or display an Ed25519 key. | Generation and `ssh-add` require approval |
 
-生效顺序:schema 默认值 < 组装 entry config < 用户设置(即下面的编辑)。所有字段都在工具调用时**实时读取**,改完即生效,无需重启。
+Example requests:
 
-**Settings 界面**:`lib/client.js`(浏览器半包,声明于 `package.json` 的 `dsh.client`)在 **Settings > Plugins** 里认领 `git-auth` 卡片,可直接在 Web 界面编辑上述全部字段、保存或重置为默认,写入的就是同一份用户设置层。
+```text
+Check my GitHub, GitLab, and SSH authentication status.
+Use the configured GH_TOKEN to sign in to GitHub.
+Generate ~/.ssh/id_ed25519 and add it to ssh-agent.
+Show the public key for ~/.ssh/id_ed25519.
+```
 
-**在哪里编辑**
-- 用户设置文档:base 层用 `dsh-settings-file` 提供,路径为 `$DSH_HOME/settings.yaml`(默认 `~/.dsh/settings.yaml`),热加载。加一段即可:
+## Installation
+
+### From source
+
+1. Clone the plugin into a path visible to the DSH host:
+
+   ```bash
+   git clone https://github.com/Wisdoverse/dsh-git-auth-plugin.git \
+     /path/to/local-plugins/dsh-git-auth
+   ```
+
+2. Add it to the target profile:
+
+   ```bash
+   dsh plugin --profile web add /path/to/local-plugins/dsh-git-auth
+   ```
+
+3. Restart the profile.
+
+The package declares its DSH bundle in [`package.json`](package.json), and
+[`cordis.patch.yml`](cordis.patch.yml) mounts the tool plugin in the host's
+global tool layer.
+
+## Configuration
+
+Open **Settings → Plugins → git-auth**, or edit the `git-auth` section in the
+DSH settings document (normally `$DSH_HOME/settings.yaml`).
+
+| Setting | Default | Accepted value |
+| --- | --- | --- |
+| `ghHost` | `github.com` | Bare GitHub hostname, optionally with a port |
+| `glabHost` | `gitlab.com` | Bare GitLab hostname, optionally with a port |
+| `commandTimeoutMs` | `60000` | Integer greater than or equal to `1` |
+| `sshPath` | Empty | Direct child of `~/.ssh`; empty means `~/.ssh/id_ed25519` |
+| `sshComment` | Empty | Default comment passed to `ssh-keygen` |
+| `sshAddAgent` | `false` | Whether generated keys are loaded with `ssh-add` by default |
 
 ```yaml
-# ~/.dsh/settings.yaml
 git-auth:
   glabHost: gitlab.example.com
+  commandTimeoutMs: 60000
+  sshPath: ~/.ssh/id_ed25519
+  sshComment: developer@example.com
   sshAddAgent: true
-  sshComment: you@example.com
 ```
 
-## Token 约定(重要)
+Settings are resolved at tool-call time, so host-side settings-file updates do
+not require a plugin reinstall. DSH may restrict settings writes from remote
+browsers; edit the host settings file if the UI is read-only.
 
-登录时 token 只从环境变量读取:
+## Token handling
 
-- gh:`GH_TOKEN` → `GITHUB_TOKEN`
-- glab:`GITLAB_TOKEN` → `GLAB_TOKEN` → `GITLAB_ACCESS_TOKEN`
+The login tool reads these variables from the DSH host process:
 
-**推荐把 token 放进环境变量或 `.env`,而不是写进对话**——这样密钥只出现在进程环境里,不穿越模型上下文。
+| Client | Precedence |
+| --- | --- |
+| `gh` | `GH_TOKEN` → `GITHUB_TOKEN` |
+| `glab` | `GITLAB_TOKEN` → `GLAB_TOKEN` → `GITLAB_ACCESS_TOKEN` |
 
-环境变量 token 只允许发送到对应客户端在插件设置中配置的主机。登录其他主机前必须先修改对应主机设置；主机名会被校验并作为单个 shell 参数编码。
+Inject tokens with the deployment's secret mechanism before starting DSH. Do
+not paste tokens into chat or commit them to this repository.
 
-## 自检
+An environment token can be sent only to that client's configured host. To use
+a different host, update `ghHost` or `glabHost` first, then restart DSH if the
+host process also needs a new environment token.
 
-```bash
-node test/compose.test.js   # 纯逻辑断言,无框架
-```
+## Security
 
-## 已刻意跳过
+This plugin manages host credentials, so its boundary is deliberately narrow:
 
-- 交互式登录(浏览器/device flow):需要 TTY,在多数会话跑不通;token 非交互覆盖了同一目标。
-- 把 git 远端从 HTTPS 改成 SSH:不是授权管理的主体,需要时用 `git remote set-url` 即可。
-- per-preset 选择性挂载:global 层注册对所有 agent 生效;若想只对某个 preset 开,把 `cordis.patch.yml` 的 `insert` 行挪进对应 preset 的 `agent.cordis.yml` 即可。
+- Tokens are read only from the host environment and passed to the CLI over
+  stdin; they never appear in tool arguments or command strings.
+- Authentication hosts are validated as bare hostnames and encoded as single
+  shell arguments.
+- SSH key paths must resolve to direct children of `~/.ssh`; existing symlinks
+  at the directory, private-key, or public-key path are rejected.
+- Read operations keep the calling session's sandbox policy.
+- Credential mutations request one-time DSH approval before running with the
+  wider filesystem access required for host credential stores.
+- Generated keys use Ed25519 and an empty passphrase for non-interactive agent
+  use. Protect the DSH host and its credential directory accordingly.
+
+## Development
+
+### Commands
+
+| Command | Purpose |
+| --- | --- |
+| `node test/compose.test.js` | Run dependency-free command, token, host, and path assertions. |
+| `node --check lib/index.js` | Syntax-check the host plugin. |
+| `node --check lib/client.js` | Syntax-check the settings client. |
+
+### Project structure
+
+| Path | Responsibility |
+| --- | --- |
+| `lib/index.js` | Tool registration, approvals, settings, and shell execution. |
+| `lib/compose.js` | Pure host, token, shell-argument, and SSH-path helpers. |
+| `lib/client.js` | Browser-side settings card. |
+| `cordis.patch.yml` | DSH bundle mounting. |
+| `test/compose.test.js` | Dependency-free regression checks. |
+
+The running Web profile loads the plugin at startup. Restart it after changing
+the source files.
+
+## License
+
+Released under the [MIT License](LICENSE).
