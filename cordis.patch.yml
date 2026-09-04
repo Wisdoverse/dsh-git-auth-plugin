@@ -1,0 +1,13 @@
+# dsh-git-auth bundle patch.
+#
+# Inserts the auth/ssh tool plugin into the HOST composition. Rows inserted at
+# the host plane register into the tools registry's GLOBAL layer, so every
+# agent sees them via its scope chain (agent -> preset -> global) regardless of
+# which preset a session runs on.
+#
+# The three tools are agent-facing only (they read and write nothing except
+# ~/.config/gh|glab-cli and ~/.ssh); the `shell`, `sandboxPolicy`, and `tools`
+# services they inject are host-plane, so this row needs no isolate realm.
+- insert:
+    - id: git-auth
+      name: 'dsh-git-auth'
