@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { assertSafeSshPath, composeAuthCommand, mergeOptions, normalizeHost, resolveSshPath, resolveToken, shellArg, DEFAULTS } from "../lib/compose.js";
+import { assertSafeSshPath, composeAuthCommand, composeGitSshConfigCommand, mergeOptions, normalizeHost, resolveSshPath, resolveToken, shellArg, DEFAULTS } from "../lib/compose.js";
 
 // gh login default + custom host
 assert.equal(composeAuthCommand("gh", undefined, false).command,
@@ -42,14 +42,31 @@ assert.equal(await resolveToken("glab", {}, undefined, undefined,
 	async (ref) => ref === "GLAB_TOKEN" ? "stored" : undefined), "stored");
 await assert.rejects(resolveToken("gh", { GH_TOKEN: "g" }, "evil.example", "github.com"), /update the plugin host setting/);
 
-// SSH paths stay as direct children of HOME/.ssh; common spellings remain valid.
-assert.equal(resolveSshPath("/home/test", undefined), "/home/test/.ssh/id_ed25519");
-assert.equal(resolveSshPath("/home/test", "~/.ssh/work"), "/home/test/.ssh/work");
-assert.equal(resolveSshPath("/home/test", "work"), "/home/test/.ssh/work");
-assert.throws(() => resolveSshPath("/home/test", "/tmp/key"), /directly under/);
-assert.throws(() => resolveSshPath("/home/test", "nested/key"), /directly under/);
+// SSH paths stay as direct children of the current workspace's .ssh directory.
+assert.equal(resolveSshPath("/workspace/repo", undefined), "/workspace/repo/.ssh/id_ed25519");
+assert.equal(resolveSshPath("/workspace/repo", "~/.ssh/work"), "/workspace/repo/.ssh/work");
+assert.equal(resolveSshPath("/workspace/repo", ".ssh/work"), "/workspace/repo/.ssh/work");
+assert.equal(resolveSshPath("/workspace/repo", "work"), "/workspace/repo/.ssh/work");
+assert.equal(resolveSshPath("/workspace/repo", "/workspace/repo/.ssh/work"), "/workspace/repo/.ssh/work");
+assert.throws(() => resolveSshPath("/workspace/repo", "/tmp/key"), /directly under/);
+assert.throws(() => resolveSshPath("/workspace/repo", "nested/key"), /directly under/);
+assert.throws(() => resolveSshPath("relative", "work"), /workspace must be an absolute path/);
 
-const temp = mkdtempSync(join(tmpdir(), "dsh-git-auth-"));
+// The generated repository-local setting survives both shell parses intact.
+const repo = mkdtempSync(join(tmpdir(), "dsh-git-auth-repo-"));
+try {
+	assert.equal(spawnSync("git", ["init", "-q", repo]).status, 0);
+	const key = join(repo, ".ssh", "deploy ' key");
+	const configured = spawnSync("bash", ["-c", composeGitSshConfigCommand(repo, key)], { encoding: "utf8" });
+	assert.equal(configured.status, 0, configured.stderr);
+	const value = spawnSync("git", ["-C", repo, "config", "--local", "--get", "core.sshCommand"], { encoding: "utf8" });
+	assert.equal(value.status, 0, value.stderr);
+	assert.equal(value.stdout.trim(), `ssh -i ${shellArg(key)} -o IdentitiesOnly=yes`);
+} finally {
+	rmSync(repo, { recursive: true, force: true });
+}
+
+const temp = mkdtempSync(join(tmpdir(), "dsh-git-auth-symlink-"));
 try {
 	symlinkSync(tmpdir(), join(temp, ".ssh"));
 	assert.throws(() => assertSafeSshPath(join(temp, ".ssh", "id_ed25519")), /must not contain symlinks/);
