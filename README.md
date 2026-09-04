@@ -90,8 +90,8 @@ global tool layer.
 
 ## Configuration
 
-Open **Settings → Plugins → git-auth**, or edit the `git-auth` section in the
-DSH settings document (normally `$DSH_HOME/settings.yaml`).
+Open **Settings → Plugins → Plugin configuration**, or edit the `git-auth`
+section in the DSH settings document (normally `$DSH_HOME/settings.yaml`).
 
 | Setting | Default | Accepted value |
 | --- | --- | --- |
