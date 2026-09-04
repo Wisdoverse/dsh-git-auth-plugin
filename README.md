@@ -117,15 +117,21 @@ browsers; edit the host settings file if the UI is read-only.
 
 ## Token handling
 
-The login tool reads these variables from the DSH host process:
+The plugin configuration card includes write-only **GitHub Token** and
+**GitLab Token** fields. They store `GH_TOKEN` and `GITLAB_TOKEN` through the
+DSH credentials service; saved values are never returned to the browser, so
+the inputs stay blank and show only configured/source status.
+
+The login tool resolves credential references in this order:
 
 | Client | Precedence |
 | --- | --- |
 | `gh` | `GH_TOKEN` → `GITHUB_TOKEN` |
 | `glab` | `GITLAB_TOKEN` → `GLAB_TOKEN` → `GITLAB_ACCESS_TOKEN` |
 
-Inject tokens with the deployment's secret mechanism before starting DSH. Do
-not paste tokens into chat or commit them to this repository.
+Existing deployment environment variables remain supported. A live environment
+value is read-only and takes precedence over the DSH credential store. Do not
+paste tokens into chat or commit them to this repository.
 
 An environment token can be sent only to that client's configured host. To use
 a different host, update `ghHost` or `glabHost` first, then restart DSH if the
@@ -135,8 +141,9 @@ host process also needs a new environment token.
 
 This plugin manages host credentials, so its boundary is deliberately narrow:
 
-- Tokens are read only from the host environment and passed to the CLI over
-  stdin; they never appear in tool arguments or command strings.
+- Tokens are resolved per login through the DSH credentials service and passed
+  to the CLI over stdin; they never appear in settings responses, tool
+  arguments, or command strings.
 - Authentication hosts are validated as bare hostnames and encoded as single
   shell arguments.
 - SSH key paths must resolve to direct children of `~/.ssh`; existing symlinks

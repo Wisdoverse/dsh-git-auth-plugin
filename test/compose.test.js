@@ -30,13 +30,17 @@ const printed = spawnSync("bash", ["-c", `printf %s ${shellArg(hostile)}`], { en
 assert.equal(printed.status, 0);
 assert.equal(printed.stdout, hostile, "shellArg keeps hostile text as one literal argument");
 
-// token resolution: environment only, per client and configured host
-assert.equal(resolveToken("gh", { GITHUB_TOKEN: "env" }), "env");
-assert.equal(resolveToken("gh", { GH_TOKEN: "g", GITHUB_TOKEN: "e" }), "g");
-assert.equal(resolveToken("glab", { GITLAB_TOKEN: "l" }), "l");
-assert.equal(resolveToken("glab", { GLAB_TOKEN: "lb" }), "lb");
-assert.equal(resolveToken("glab", {}), undefined);
-assert.throws(() => resolveToken("gh", { GH_TOKEN: "g" }, "evil.example", "github.com"), /update the plugin host setting/);
+// token resolution: DSH credentials or environment, per client and configured host
+assert.equal(await resolveToken("gh", { GITHUB_TOKEN: "env" }), "env");
+assert.equal(await resolveToken("gh", { GH_TOKEN: "g", GITHUB_TOKEN: "e" }), "g");
+assert.equal(await resolveToken("glab", { GITLAB_TOKEN: "l" }), "l");
+assert.equal(await resolveToken("glab", { GLAB_TOKEN: "lb" }), "lb");
+assert.equal(await resolveToken("glab", {}), undefined);
+assert.equal(await resolveToken("gh", {}, undefined, undefined,
+	async (ref) => ref === "GH_TOKEN" ? "stored" : undefined), "stored");
+assert.equal(await resolveToken("glab", {}, undefined, undefined,
+	async (ref) => ref === "GLAB_TOKEN" ? "stored" : undefined), "stored");
+await assert.rejects(resolveToken("gh", { GH_TOKEN: "g" }, "evil.example", "github.com"), /update the plugin host setting/);
 
 // SSH paths stay as direct children of HOME/.ssh; common spellings remain valid.
 assert.equal(resolveSshPath("/home/test", undefined), "/home/test/.ssh/id_ed25519");
