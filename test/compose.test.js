@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, symlinkSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assertSafeSshPath, composeAuthCommand, composeGitSshConfigCommand, mergeOptions, normalizeHost, resolveSshPath, resolveToken, shellArg, DEFAULTS } from "../lib/compose.js";
@@ -61,7 +61,7 @@ try {
 	assert.equal(configured.status, 0, configured.stderr);
 	const value = spawnSync("git", ["-C", repo, "config", "--local", "--get", "core.sshCommand"], { encoding: "utf8" });
 	assert.equal(value.status, 0, value.stderr);
-	assert.equal(value.stdout.trim(), `ssh -i ${shellArg(key)} -o IdentitiesOnly=yes`);
+	assert.equal(value.stdout.trim(), `ssh -i ${shellArg(key)} -o IdentitiesOnly=yes -o ${shellArg(`UserKnownHostsFile=${join(repo, ".ssh", "known_hosts")}`)} -o StrictHostKeyChecking=accept-new`);
 } finally {
 	rmSync(repo, { recursive: true, force: true });
 }
@@ -72,6 +72,15 @@ try {
 	assert.throws(() => assertSafeSshPath(join(temp, ".ssh", "id_ed25519")), /must not contain symlinks/);
 } finally {
 	rmSync(temp, { recursive: true, force: true });
+}
+
+const knownHostsTemp = mkdtempSync(join(tmpdir(), "dsh-git-auth-known-hosts-"));
+try {
+	mkdirSync(join(knownHostsTemp, ".ssh"));
+	symlinkSync(join(tmpdir(), "outside-known-hosts"), join(knownHostsTemp, ".ssh", "known_hosts"));
+	assert.throws(() => assertSafeSshPath(join(knownHostsTemp, ".ssh", "id_ed25519")), /must not contain symlinks/);
+} finally {
+	rmSync(knownHostsTemp, { recursive: true, force: true });
 }
 
 for (const invalidHost of ["https://github.com", "user@github.com", "github.com/path", "github.com\\evil", "github。com", "github.com."]) {

@@ -119,7 +119,8 @@ git-auth:
 
 `sshPath` 是实例共享的默认文件名，但每次都会在当前 session 的 workspace 内独立
 解析。`ssh_key generate` 会同时写入该仓库本地的 `core.sshCommand`；已有 key 可通过
-`action: configure` 完成绑定。
+`action: configure` 完成绑定。该命令固定使用 `<workspace>/.ssh/known_hosts`，因此
+DSH 进程没有 `HOME` 时也可正常工作。
 
 ## Token 处理
 
@@ -151,8 +152,9 @@ token 粘贴到对话中，也不要提交到本仓库。
   工具参数或命令字符串。
 - 授权主机必须是合法的裸主机名，并编码为单个 shell 参数。
 - SSH key 必须位于当前 workspace 的 `.ssh` 直接子路径；目录、私钥或公钥路径上的已有符号链接会被拒绝。
-- 仓库本地 `core.sshCommand` 通过 `IdentitiesOnly=yes` 固定使用 workspace key；每个
-  workspace 仓库都应忽略 `.ssh/`。
+- 仓库本地 `core.sshCommand` 通过 `IdentitiesOnly=yes` 固定使用 workspace key 和本地
+  `known_hosts`；首次连接使用 `accept-new`，之后拒绝主机 key 变更。每个 workspace
+  仓库都应忽略 `.ssh/`。
 - 只读操作和 workspace key 写入沿用当前 session 的沙箱边界；只读 session 会请求
   workspace-write 审批。
 - 共享 CLI 凭据写操作先请求一次 DSH 审批，再取得访问宿主凭据目录所需的更宽权限。

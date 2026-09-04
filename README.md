@@ -122,7 +122,9 @@ browsers; edit the host settings file if the UI is read-only.
 
 `sshPath` is a shared default name resolved separately inside every session
 workspace. `ssh_key generate` also writes that repository's local
-`core.sshCommand`; use `action: configure` to bind an existing key.
+`core.sshCommand`; use `action: configure` to bind an existing key. That command
+uses `<workspace>/.ssh/known_hosts`, so it also works when the DSH process has no
+`HOME`.
 
 ## Token handling
 
@@ -163,7 +165,9 @@ This plugin manages host credentials, so its boundary is deliberately narrow:
   `.ssh` directory; existing symlinks
   at the directory, private-key, or public-key path are rejected.
 - Repository-local `core.sshCommand` pins Git to the workspace key with
-  `IdentitiesOnly=yes`; keep `.ssh/` ignored by every workspace repository.
+  `IdentitiesOnly=yes` and a workspace-local `known_hosts`; a missing host is
+  accepted on first use (`accept-new`) and later key changes are rejected. Keep
+  `.ssh/` ignored by every workspace repository.
 - Read operations and workspace key writes keep the calling session's sandbox
   boundary. Read-only sessions request workspace-write approval.
 - Shared CLI credential mutations request one-time DSH approval before using
