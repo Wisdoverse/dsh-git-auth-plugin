@@ -58,8 +58,8 @@ Manage this workspace's deploy key   →  ssh_key
 | Tool | Purpose | Writes state |
 | --- | --- | --- |
 | `auth_status` | Show GitHub CLI, GitLab CLI, SSH-agent, and public-key status. | No |
-| `client_auth` | Log `gh` or `glab` in or out. | Yes; approval required |
-| `ssh_key` | Generate, configure, list, or display the current workspace's Ed25519 deploy key. | Generation/configuration use workspace access; `ssh-add` requires host approval |
+| `client_auth` | Log `gh` or `glab` in or out. | Yes; requests escalation if host access is not already granted |
+| `ssh_key` | Generate, configure, list, or display the current workspace's Ed25519 deploy key. | Generation/configuration use workspace access; `ssh-add` requests host access |
 
 Example requests:
 
@@ -126,12 +126,17 @@ workspace. `ssh_key generate` also writes that repository's local
 uses `<workspace>/.ssh/known_hosts`, so it also works when the DSH process has no
 `HOME`.
 
+Key names ending in `.pub`, `.gitignore`, and `known_hosts` are reserved.
+Public-key output validates a complete OpenSSH public key and omits its comment;
+the on-disk comment is preserved, and showing a public-only file remains supported.
+
 ## Token handling
 
 The plugin configuration card includes write-only **GitHub Token** and
 **GitLab Token** fields. They store `GH_TOKEN` and `GITLAB_TOKEN` through the
-DSH credentials service; saved values are never returned to the browser, so
-the inputs stay blank and show only configured/source status.
+DSH credentials service. The client requests only credential metadata, never
+saved values; backend authorization, storage, and readback protection are owned
+by the DSH credentials service.
 
 The login tool resolves credential references in this order:
 
@@ -140,9 +145,10 @@ The login tool resolves credential references in this order:
 | `gh` | `GH_TOKEN` → `GITHUB_TOKEN` |
 | `glab` | `GITLAB_TOKEN` → `GLAB_TOKEN` → `GITLAB_ACCESS_TOKEN` |
 
-Existing deployment environment variables remain supported. A live environment
-value is read-only and takes precedence over the DSH credential store. Do not
-paste tokens into chat or commit them to this repository.
+Existing deployment environment variables remain supported. When the DSH
+credentials service is present, it owns environment/store precedence and write
+permissions; otherwise the plugin reads the environment directly. Do not paste
+tokens into chat or commit them to this repository.
 
 Tokens are instance-global in the current DSH credential model and therefore
 shared by all workspaces. Use a separate DSH instance for another user or trust
@@ -156,9 +162,10 @@ host process also needs a new environment token.
 
 This plugin manages host credentials, so its boundary is deliberately narrow:
 
-- Tokens are resolved per login through the DSH credentials service and passed
-  to the CLI over stdin; they never appear in settings responses, tool
-  arguments, or command strings.
+- Tokens are resolved per login through the DSH credentials service (or host
+  environment fallback) and passed to the CLI over stdin, not tool arguments or
+  command strings. Host stdin logging and CLI output masking require separate
+  deployment verification; status results include account and workspace metadata.
 - Authentication hosts are validated as bare hostnames and encoded as single
   shell arguments.
 - SSH key paths must resolve to direct children of the current workspace's
@@ -166,12 +173,17 @@ This plugin manages host credentials, so its boundary is deliberately narrow:
   at the directory, private-key, or public-key path are rejected.
 - Repository-local `core.sshCommand` pins Git to the workspace key with
   `IdentitiesOnly=yes` and a workspace-local `known_hosts`; a missing host is
-  accepted on first use (`accept-new`) and later key changes are rejected. Keep
-  `.ssh/` ignored by every workspace repository.
+  accepted on first use (`accept-new`) and later key changes are rejected.
+- Before generating or configuring keys, the plugin appends an effective `*`
+  rule to `.ssh/.gitignore`, preserving existing rules. This also protects keys
+  created before `git init`. Already tracked `.ssh` files cause the operation to
+  stop without changing the index. Untrack them explicitly and rotate any key
+  previously published; ignore rules cannot protect against `git add -f` or
+  remove secrets from history.
 - Read operations and workspace key writes keep the calling session's sandbox
   boundary. Read-only sessions request workspace-write approval.
-- Shared CLI credential mutations request one-time DSH approval before using
-  wider host filesystem access.
+- Shared CLI credential mutations request DSH escalation when the session does
+  not already have the required host access.
 - Generated keys use Ed25519 and an empty passphrase for non-interactive agent
   use. Protect the DSH host and its credential directory accordingly.
 
@@ -181,7 +193,8 @@ This plugin manages host credentials, so its boundary is deliberately narrow:
 
 | Command | Purpose |
 | --- | --- |
-| `node test/compose.test.js` | Run dependency-free command, token, host, and path assertions. |
+| `node test/compose.test.js` | Run command/token/path assertions and SSH disclosure/Git exclusion regressions; requires Node, Git, OpenSSH and Bash. |
+| `node test/tools.test.js` | Exercise registered SSH tool handlers after installing peer dependencies. |
 | `node --check lib/index.js` | Syntax-check the host plugin. |
 | `node --check lib/client.js` | Syntax-check the settings client. |
 

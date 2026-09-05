@@ -5,9 +5,9 @@
 # agent sees them via its scope chain (agent -> preset -> global) regardless of
 # which preset a session runs on.
 #
-# The three tools are agent-facing only (they read and write nothing except
-# ~/.config/gh|glab-cli and ~/.ssh); the `shell`, `sandboxPolicy`, and `tools`
-# services they inject are host-plane, so this row needs no isolate realm.
+# The tools use shared gh/glab profiles and the SSH agent, plus workspace .ssh
+# files and repository-local Git configuration. Commands use the host shell
+# service with the calling session's sandbox policy and required escalation.
 - insert:
     - id: git-auth
       name: 'dsh-git-auth'
