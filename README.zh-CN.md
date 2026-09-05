@@ -57,8 +57,8 @@
 | 工具 | 用途 | 是否写入状态 |
 | --- | --- | --- |
 | `auth_status` | 显示 GitHub CLI、GitLab CLI、SSH agent 和公钥状态。 | 否 |
-| `client_auth` | 登录或登出 `gh` / `glab`。 | 是；需要审批 |
-| `ssh_key` | 生成、配置、列出或显示当前 workspace 的 Ed25519 Deploy Key。 | 生成/配置使用 workspace 权限；`ssh-add` 需要宿主审批 |
+| `client_auth` | 登录或登出 `gh` / `glab`。 | 是；尚未获准宿主访问时请求提权审批 |
+| `ssh_key` | 生成、配置、列出或显示当前 workspace 的 Ed25519 Deploy Key。 | 生成/配置使用 workspace 权限；`ssh-add` 请求宿主权限 |
 
 可以直接对 agent 这样说：
 
@@ -122,11 +122,15 @@ git-auth:
 `action: configure` 完成绑定。该命令固定使用 `<workspace>/.ssh/known_hosts`，因此
 DSH 进程没有 `HOME` 时也可正常工作。
 
+私钥文件名不能以 `.pub` 结尾，也不能使用 `.gitignore` 或 `known_hosts`。
+公钥输出会验证完整的 OpenSSH 公钥并省略注释；磁盘上的注释保持不变，
+只有公钥文件、没有私钥时也仍可显示。
+
 ## Token 处理
 
 插件配置卡片包含只写的 **GitHub Token** 与 **GitLab Token** 字段。它们通过
-DSH 凭据服务分别保存为 `GH_TOKEN` 和 `GITLAB_TOKEN`；已保存的值绝不会返回
-浏览器，因此输入框始终为空，只显示是否已配置及来源。
+DSH 凭据服务分别保存为 `GH_TOKEN` 和 `GITLAB_TOKEN`。客户端仅请求凭据元数据，
+不读取已保存的值；后端授权、存储与防回读由 DSH 凭据服务负责。
 
 登录工具按以下顺序解析凭据引用：
 
@@ -135,8 +139,9 @@ DSH 凭据服务分别保存为 `GH_TOKEN` 和 `GITLAB_TOKEN`；已保存的值�
 | `gh` | `GH_TOKEN` → `GITHUB_TOKEN` |
 | `glab` | `GITLAB_TOKEN` → `GLAB_TOKEN` → `GITLAB_ACCESS_TOKEN` |
 
-原有部署环境变量仍然支持。进程环境中的值只读，并优先于 DSH 凭据存储。不要把
-token 粘贴到对话中，也不要提交到本仓库。
+原有部署环境变量仍然支持。存在 DSH 凭据服务时，由该服务决定环境变量与存储值的
+优先级及写权限；没有该服务时插件直接读取环境变量。不要把 token 粘贴到对话中，
+也不要提交到本仓库。
 
 当前 DSH 凭据模型中的 Token 是实例全局状态，会由所有 workspace 共享。另一位用户
 或另一个信任域应使用独立的 DSH 实例。
@@ -148,16 +153,20 @@ token 粘贴到对话中，也不要提交到本仓库。
 
 本插件直接管理宿主凭据，因此刻意保持较窄的权限边界：
 
-- Token 在每次登录时通过 DSH 凭据服务解析并经 stdin 交给 CLI，不进入设置响应、
-  工具参数或命令字符串。
+- Token 在每次登录时通过 DSH 凭据服务解析（或回退到宿主环境变量）并经 stdin
+  交给 CLI，不进入工具参数或命令字符串。宿主 stdin 日志与 CLI 输出脱敏仍需部署
+  验证；状态结果会包含账户与 workspace 元数据。
 - 授权主机必须是合法的裸主机名，并编码为单个 shell 参数。
 - SSH key 必须位于当前 workspace 的 `.ssh` 直接子路径；目录、私钥或公钥路径上的已有符号链接会被拒绝。
 - 仓库本地 `core.sshCommand` 通过 `IdentitiesOnly=yes` 固定使用 workspace key 和本地
-  `known_hosts`；首次连接使用 `accept-new`，之后拒绝主机 key 变更。每个 workspace
-  仓库都应忽略 `.ssh/`。
+  `known_hosts`；首次连接使用 `accept-new`，之后拒绝主机 key 变更。
+- 生成或配置 key 前，插件会保留 `.ssh/.gitignore` 的已有内容并追加生效的 `*`
+  规则，覆盖先生成 key、后 `git init` 的用法。若 `.ssh` 已有文件被 Git 跟踪，
+  操作会停止且不修改暂存区。请显式取消跟踪，并轮换曾发布的 key；忽略规则无法
+  阻止 `git add -f`，也不能清除历史中的秘密。
 - 只读操作和 workspace key 写入沿用当前 session 的沙箱边界；只读 session 会请求
   workspace-write 审批。
-- 共享 CLI 凭据写操作先请求一次 DSH 审批，再取得访问宿主凭据目录所需的更宽权限。
+- 共享 CLI 凭据写操作仅在当前 session 尚无所需宿主权限时请求 DSH 提权审批。
 - 新 key 使用 Ed25519 和空密码，以便 agent 非交互使用；请妥善保护 DSH 宿主及其凭据目录。
 
 ## 开发
@@ -166,7 +175,8 @@ token 粘贴到对话中，也不要提交到本仓库。
 
 | 命令 | 用途 |
 | --- | --- |
-| `node test/compose.test.js` | 运行无依赖的命令、token、主机和路径断言。 |
+| `node test/compose.test.js` | 运行命令/token/路径断言及 SSH 泄漏、Git 排除回归；需要 Node、Git、OpenSSH 和 Bash。 |
+| `node test/tools.test.js` | 安装 peer 依赖后验证注册的 SSH 工具处理流程。 |
 | `node --check lib/index.js` | 检查宿主插件语法。 |
 | `node --check lib/client.js` | 检查设置客户端语法。 |
 
