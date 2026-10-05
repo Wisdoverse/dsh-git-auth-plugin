@@ -1,27 +1,29 @@
-<h1 align="center">dsh-git-auth</h1>
+<div align="center">
 
-<p align="center">
-  <strong>GitHub, GitLab, and SSH authentication tools for DeepSeek Harness</strong>
-</p>
+<a id="dsh-git-auth"></a>
 
-<p align="center">
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/Wisdoverse/dsh-git-auth-plugin?style=flat-square"></a>
-  <a href="package.json"><img alt="Top language" src="https://img.shields.io/github/languages/top/Wisdoverse/dsh-git-auth-plugin?style=flat-square"></a>
-  <img alt="Token handling" src="https://img.shields.io/badge/tokens-write--only-2ea44f?style=flat-square">
-</p>
+# 🔐 dsh-git-auth
 
-<p align="center">
-  <strong>English</strong> · <a href="README.zh-CN.md">简体中文</a>
-</p>
+**GitHub, GitLab, and SSH authentication tools for DeepSeek Harness.**
 
-Give DSH agents a small, approval-aware toolset for inspecting and managing
-`gh`, `glab`, and SSH credentials on the host.
+<strong>English</strong> · <a href="README.zh-CN.md">简体中文</a>
 
-```text
-Check authentication                 →  auth_status
-Sign in with GH_TOKEN / GITLAB_TOKEN →  client_auth
-Manage this workspace's deploy key   →  ssh_key
+[![License](https://img.shields.io/badge/license-MIT-16a34a.svg?style=flat-square)](LICENSE)
+[![GitHub source](https://img.shields.io/badge/GitHub-source-181717?logo=github&amp;logoColor=white&amp;style=flat-square)](https://github.com/Wisdoverse/dsh-git-auth-plugin)
+[![Token handling](https://img.shields.io/badge/tokens-write--only-2ea44f?style=flat-square)](#token-handling)
+
+</div>
+
+**🚀 Quick install**
+
+```bash
+git clone https://github.com/Wisdoverse/dsh-git-auth-plugin.git
+dsh plugin --profile web add ./dsh-git-auth-plugin
 ```
+
+Restart the Web profile after installation. See the detailed [installation instructions](#installation).
+
+[🚀 Installation](#installation) · [✨ Features](#features) · [⚙️ Configuration](#configuration) · [🐛 Feedback](https://github.com/Wisdoverse/dsh-git-auth-plugin/issues)
 
 ## Contents
 
@@ -34,15 +36,21 @@ Manage this workspace's deploy key   →  ssh_key
 - [Development](#development)
 - [License](#license)
 
+```text
+Check authentication                 →  auth_status
+Sign in with GH_TOKEN / GITLAB_TOKEN →  client_auth
+Manage this workspace's deploy key   →  ssh_key
+```
+
 ## Features
 
-| Feature | Description |
-| --- | --- |
-| Unified status | Reports `gh`, `glab`, SSH-agent, and public-key status in one call. |
-| Non-interactive login | Authenticates `gh` or `glab` with a token from plugin settings or the DSH host environment. |
-| Workspace deploy keys | Generates, configures, lists, and displays Ed25519 keys under each workspace's `.ssh` directory. |
-| Approval-aware writes | Keeps key changes inside workspace access and requests host approval for shared CLI/agent changes. |
-| Settings UI | Exposes hosts, timeout, key path, comment, and `ssh-add` defaults under **Settings → Plugins**. |
+| Icon | Feature | Description |
+| --- | --- | --- |
+| 🔎 | Unified status | Reports `gh`, `glab`, SSH-agent, and public-key status in one call. |
+| 🔑 | Non-interactive login | Authenticates `gh` or `glab` with a token from plugin settings or the DSH host environment. |
+| 🗝️ | Workspace deploy keys | Generates, configures, lists, and displays Ed25519 keys under each workspace's `.ssh` directory. |
+| 🛡️ | Approval-aware writes | Keeps key changes inside workspace access and requests host approval for shared CLI/agent changes. |
+| ⚙️ | Settings UI | Exposes hosts, timeout, key path, comment, and `ssh-add` defaults under **Settings → Plugins**. |
 
 > [!IMPORTANT]
 > Access tokens are not accepted as tool arguments. Save them in the plugin
