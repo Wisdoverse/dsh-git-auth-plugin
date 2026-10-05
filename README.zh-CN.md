@@ -1,27 +1,29 @@
-<h1 align="center">dsh-git-auth</h1>
+<div align="center">
 
-<p align="center">
-  <strong>面向 DeepSeek Harness 的 GitHub、GitLab 与 SSH 授权工具</strong>
-</p>
+<a id="dsh-git-auth"></a>
 
-<p align="center">
-  <a href="LICENSE"><img alt="许可证" src="https://img.shields.io/github/license/Wisdoverse/dsh-git-auth-plugin?style=flat-square"></a>
-  <a href="package.json"><img alt="主要语言" src="https://img.shields.io/github/languages/top/Wisdoverse/dsh-git-auth-plugin?style=flat-square"></a>
-  <img alt="Token 处理" src="https://img.shields.io/badge/token-仅写-2ea44f?style=flat-square">
-</p>
+# 🔐 dsh-git-auth
 
-<p align="center">
-  <a href="README.md">English</a> · <strong>简体中文</strong>
-</p>
+**面向 DeepSeek Harness 的 GitHub、GitLab 与 SSH 授权工具。**
 
-为 DSH agent 提供一组小而明确、受审批保护的宿主工具，用于检查和管理
-`gh`、`glab` 与 SSH 凭据。
+<a href="README.md">English</a> · <strong>简体中文</strong>
 
-```text
-检查授权状态                         →  auth_status
-使用 GH_TOKEN / GITLAB_TOKEN 登录    →  client_auth
-管理当前 workspace 的 Deploy Key     →  ssh_key
+[![许可证](https://img.shields.io/badge/license-MIT-16a34a.svg?style=flat-square)](LICENSE)
+[![GitHub 源码](https://img.shields.io/badge/GitHub-source-181717?logo=github&amp;logoColor=white&amp;style=flat-square)](https://github.com/Wisdoverse/dsh-git-auth-plugin)
+[![Token 处理](https://img.shields.io/badge/tokens-write--only-2ea44f?style=flat-square)](#token-处理)
+
+</div>
+
+**🚀 快速安装**
+
+```bash
+git clone https://github.com/Wisdoverse/dsh-git-auth-plugin.git
+dsh plugin --profile web add ./dsh-git-auth-plugin
 ```
+
+安装后请重启 Web profile。请查看[详细安装说明](#安装)。
+
+[🚀 安装](#安装) · [✨ 功能](#功能特性) · [⚙️ 配置](#配置) · [🐛 反馈](https://github.com/Wisdoverse/dsh-git-auth-plugin/issues)
 
 ## 目录
 
@@ -34,15 +36,21 @@
 - [开发](#开发)
 - [许可证](#许可证)
 
+```text
+检查授权状态                         →  auth_status
+使用 GH_TOKEN / GITLAB_TOKEN 登录    →  client_auth
+管理当前 workspace 的 Deploy Key     →  ssh_key
+```
+
 ## 功能特性
 
-| 特性 | 说明 |
-| --- | --- |
-| 统一状态检查 | 一次查看 `gh`、`glab`、SSH agent 和本地公钥状态。 |
-| 非交互登录 | 使用插件设置或 DSH 宿主环境中的 token 登录 `gh` 或 `glab`。 |
-| Workspace Deploy Key | 在每个 workspace 的 `.ssh` 目录中生成、配置、列出和显示 Ed25519 key。 |
-| 写操作审批 | Key 变更受 workspace 权限限制；共享 CLI/agent 变更请求宿主审批。 |
-| 设置界面 | 在 **设置 → 插件** 中配置主机、超时、key 路径、注释和 `ssh-add` 默认值。 |
+| 图标 | 功能 | 说明 |
+| --- | --- | --- |
+| 🔎 | 统一状态检查 | 一次查看 `gh`、`glab`、SSH agent 和本地公钥状态。 |
+| 🔑 | 非交互登录 | 使用插件设置或 DSH 宿主环境中的 token 登录 `gh` 或 `glab`。 |
+| 🗝️ | Workspace Deploy Key | 在每个 workspace 的 `.ssh` 目录中生成、配置、列出和显示 Ed25519 key。 |
+| 🛡️ | 写操作审批 | Key 变更受 workspace 权限限制；共享 CLI/agent 变更请求宿主审批。 |
+| ⚙️ | 设置界面 | 在 **设置 → 插件** 中配置主机、超时、key 路径、注释和 `ssh-add` 默认值。 |
 
 > [!IMPORTANT]
 > 工具不接受 token 参数。请通过插件设置或 DSH 宿主环境保存 token，避免其进入模型上下文或工具调用日志。
